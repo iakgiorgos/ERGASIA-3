@@ -1,0 +1,116 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+#define PORT 8080
+#define meg_pr 20
+#define meg_pel 5
+#define ep_ana_pel 10
+
+// DOMH
+typedef struct {
+    char perigrafi[50];
+    float timh;
+    int metritis_ant;
+    int ep;
+    int poul;
+    char apot_pel[100][50];
+    int apot_metr;
+} Proion;
+
+Proion catalogos[meg_pr];// PINAKAS KATALOGWN
+//ARXIKOPOIHSH KATALOGOU
+void arxikopoihsh_catalogos() {
+    for (int i = 0; i < meg_pr; i++) {
+        sprintf(catalogos[i].perigrafi, "Proion %d", i);
+        catalogos[i].timh = (rand() % 1000) / 10.0;
+        catalogos[i].metritis_ant = 2;
+        catalogos[i].ep = 0;
+        catalogos[i].poul = 0;
+        catalogos[i].apot_metr = 0;
+    }
+}
+//EPEKSERGASIA PROIONTOS
+void process_order(int pelatis_socket, int Proion_id, char *pelatis_id) {
+    if (Proion_id < 0 || Proion_id >= meg_pr) {
+        char msg[] = "Kako Proion ID\n";
+        write(pelatis_socket, msg, strlen(msg));
+        return;
+    }
+    
+    catalogos[Proion_id].ep++;
+    sleep(1); // PAUSE
+    
+    if (catalogos[Proion_id].metritis_ant > 0) {
+        catalogos[Proion_id].metritis_ant--;
+        catalogos[Proion_id].poul++;
+        char msg[100];
+        sprintf(msg, "Paragkelia elifthi: %s, timh: %.2f\n", catalogos[Proion_id].perigrafi, catalogos[Proion_id].timh);
+        write(pelatis_socket, msg, strlen(msg));
+    } else {
+        sprintf(catalogos[Proion_id].apot_pel[catalogos[Proion_id].apot_metr++], "%s", pelatis_id);
+        char msg[] = "Proion mh diathesimo\n";
+        write(pelatis_socket, msg, strlen(msg));
+    }
+}
+//DIMIOURGIA SERVER
+void start_server() {
+    int server_fd, pelatis_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("smiksi apotixis");
+        exit(EXIT_FAILURE);
+    }
+    
+    if (listen(server_fd, meg_pel) < 0) {
+        perror("akroasi apethxe");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("O Server antapokrinetai sto  %d... port \n", PORT);
+
+    while (1) {
+        if ((pelatis_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0) {
+            perror("apotixia apodoxis");
+            exit(EXIT_FAILURE);
+        }
+        if (fork() == 0) {
+            close(server_fd);
+            char pelatis_id[50];
+            read(pelatis_socket, pelatis_id, sizeof(pelatis_id));
+
+            for (int i = 0; i < ep_ana_pel; i++) {
+                int Proion_id;
+                read(pelatis_socket, &Proion_id, sizeof(int));
+                process_order(pelatis_socket, Proion_id, pelatis_id);
+                sleep(1);
+            }
+            close(pelatis_socket);
+            exit(0);
+        }
+        close(pelatis_socket);
+    }
+}
+//MAIN
+int main() {
+    srand(time(NULL));
+    arxikopoihsh_catalogos();
+    start_server();
+    return 0;
+}
